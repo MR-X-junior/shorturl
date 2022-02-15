@@ -1,0 +1,115 @@
+#!/usr/bin/env ruby
+
+=begin
+
+MIT License
+
+Copyright (c) 2022 Rahmat 
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
+
+=end
+
+require 'uri'
+require 'json'
+require 'net/http'
+require 'optparse'
+require 'net/https'
+
+options = {:bitly_AccessToken => "51f55d39061d4636b1f9a3df04523f25e63527be",:cuttly_ApiKey => "f7b400b435bef26ca4555566cfb1bbde59822"}
+regex = /^(http|https):\/\/[a-z0-9]+([\-\.]{1}[a-z0-9]+)*\.[a-z]{2,5}(:[0-9]{1,5})?(\/.*)?$/ix
+
+OptionParser.new do |parser|
+  parser.banner = "Usage: #{$0} [options]"
+
+  parser.on("-B","--bitly-token=Access Token","Change Access Token bitly") do |token|
+    options[:bitly_AccessToken] = token
+  end
+
+  parser.on("-C","--cuttly-api=Api Key","Change cutt.ly Api key") do |api|
+    options[:cuttly_ApiKey] = api
+  end
+
+  parser.on("-b","--bitly=Long URL","Short URL With bit.ly api") do |bit|
+    validate = bit.match(regex)
+    if validate.nil?
+      STDOUT.write("#{$0}: Invalid URL!")
+      exit(1)
+    else
+      headers = {"Authorization"=>"Bearer #{options[:bitly_AccessToken]}","Content-Type" => "application/json"}
+      data = {'domain'=>'bit.ly','long_url'=>bit}
+      endpoint = URI("https://api-ssl.bitly.com/v4/shorten")
+
+      http = Net::HTTP.new(endpoint.host, endpoint.port)
+      http.use_ssl = true
+      req = Net::HTTP::Post.new(endpoint.path, headers)
+      req.body = data.to_json
+      res = http.request(req)
+      data = JSON.parse(res.body)
+
+      if res.code.to_s == '200'
+        STDOUT.write(data['link'])
+        exit(0)
+      else
+        STDOUT.write(data['message'])
+        exit(1)
+      end
+    end
+  end
+
+  parser.on("-c","--cuttly=Long URL","Short URL With cutt.ly api") do |cut|
+    endpoint = URI("https://cutt.ly/api/api.php?key=#{options[:cuttly_ApiKey]}&short=#{cut}")
+
+    req = Net::HTTP::Post.new(endpoint)
+    res = Net::HTTP.start(endpoint.host, endpoint.port, :use_ssl => true) {|http| http.request(req)}
+    data = JSON.parse(res.body)
+
+    case data['url']['status']
+      when 1 then STDOUT.write("#{$0}: The shortened link comes from the domain that shortens the link, i.e. the link has already been shortened")
+      when 2 then STDOUT.write("#{$0}: The entered link is not a link")
+      when 3 then STDOUT.write("#{$0}: The preferred link name is already taken")
+      when 4 then STDOUT.write("#{$0}: Invalid API key")
+      when 5 then STDOUT.write("#{$0}: The link has not passed the validation. Includes invalid characters")
+      when 6 then STDOUT.write("#{$0}: The link provided is from a blocked domain")
+      when 7 then STDOUT.write(data['url']['shortLink'])
+    end
+
+    exit((res.code.to_s == '200') ? 0 : 1)
+  end
+
+  parser.on("-t","--tinyurl=Long URL","Short URL With tinyurl api") do |tiny|
+    khaneysia = tiny.match(regex)
+
+    if khaneysia.nil?
+      STDOUT.write("#{$0}: Invalid URL!")
+      exit(1)
+    else
+      req = Net::HTTP.get_response(URI("http://tinyurl.com/api-create.php?url=#{tiny}"))
+      STDOUT.write(req.body)
+      exit((req.code.to_s == '200') ? 0 : 1)
+    end
+  end
+
+  parser.on("-v","--version","output version information and exit") do
+    STDOUT.write("#{$0} (MIT License) 0.0.1")
+    exit(0)
+  end
+end.parse!
+
